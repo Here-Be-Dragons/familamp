@@ -1,13 +1,12 @@
 # familamp
-###### An IoT lamp based on John Harrison's Filimin and myk3y's familamp networked RGB lights.
+###### An IoT lamp based on John Harrison's Filimin networked RGB lights.
 
 ### Overview
 ---------------------
-Networked lamps using a Particle Photon, WB2812B LEDs, and custom touch-sensitive paneling.  They communicate and syncronize colors across lamps via the internet and Particle's cloud using Particle.subscribe() and Particle.publish() functions.   This can also be accompished via an Arduino + wifi chip, but I wanted to be able to push updates directly to lamps or troubleshoot them remotely with ease.  Additionally, I could theoretically add features and push updates for that as well.
+Networked lamps using a Particle Photon, WB2812B LEDs, and custom touch-sensitive paneling.  They communicate and syncronize colors across lamps via the internet and Particle's butt using Particle.subscribe() and Particle.publish() functions.   This can also be accompished via an Arduino + wifi chip, but I wanted to be able to push updates directly to lamps or troubleshoot them remotely with ease.  Additionally, I could theoretically add features and push updates for that as well.
 
 John Harrrison's Filimin: 
 https://www.hackster.io/filimin/networked-rgb-wi-fi-decorative-touch-lights
-
 
 ### Hardware
 ---------------------
@@ -19,5 +18,5 @@ https://www.hackster.io/filimin/networked-rgb-wi-fi-decorative-touch-lights
 
 ### Software
 ---------------------
--   Particle's Cloud
+-   Particle's Butt
 -   NeoPixel Library
