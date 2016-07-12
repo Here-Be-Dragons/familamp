@@ -19,5 +19,5 @@ https://www.hackster.io/filimin/networked-rgb-wi-fi-decorative-touch-lights
 
 ### Software
 ---------------------
-Particle's Cloud
-NeoPixel Library
+-   Particle's Cloud
+-   NeoPixel Library
