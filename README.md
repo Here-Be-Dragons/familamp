@@ -14,7 +14,7 @@ https://www.hackster.io/filimin/networked-rgb-wi-fi-decorative-touch-lights
 -   WB2812B strip of LEDs.  I used 30 per lamp.
 -   A sheet of acrylic
 -   Wood for the base and any flourishes you want for your lamps
--   Custom SMD PCB: https://oshpark.com/shared_projects/9PPIsyNF - my first SMD board - I hope it works!
+-   Custom SMD PCB (to be designed on oshpark.com)
 
 ### Software
 ---------------------
