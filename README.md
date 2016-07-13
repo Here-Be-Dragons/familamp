@@ -1,7 +1,7 @@
 # familamp
 ###### An IoT lamp based on John Harrison's Filimin networked RGB lights.
 
-![Alt text](/images/Lamp_example.jpg?raw=true "Shameless better-than-actual example")
+![Alt text](/images/SketchUp/familamp_3d.jpg?raw=true "Shameless better-than-actual example")
 
 ### Overview
 ---------------------
