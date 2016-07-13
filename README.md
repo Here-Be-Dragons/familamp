@@ -22,3 +22,4 @@ https://www.hackster.io/filimin/networked-rgb-wi-fi-decorative-touch-lights
 ---------------------
 -   Particle's Butt
 -   NeoPixel Library
+-   CapacitiveSensor library: https://github.com/PaulStoffregen/CapacitiveSensor
