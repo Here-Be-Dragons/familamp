@@ -13,6 +13,8 @@ Networked lamps using a Particle Photon, WB2812B LEDs, and custom touch-sensitiv
 -   WB2812B strip of LEDs.  I used 30 per lamp.
 -   A sheet of acrylic, no thicker than 1/8".
 -   Wood for the base and any flourishes you want for your lamps
+-   3/4" x 3/4" outside corner moulding (if desired, to hide acrylic seems)
+    -   http://www.homedepot.com/p/Alexandria-Moulding-WM-206-3-4-in-x-3-4-in-x-96-in-Wood-Red-Oak-Outside-Corner-Moulding-0W206-40096C/205917014
 -   Custom SMD PCB (to be designed on oshpark.com)
 
 ### Software
