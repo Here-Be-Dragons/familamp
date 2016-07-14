@@ -11,7 +11,7 @@ Networked lamps using a Particle Photon, WB2812B LEDs, and custom touch-sensitiv
 ---------------------
 -   Particle Photon
 -   WB2812B strip of LEDs.  I used 30 per lamp.
--   A sheet of acrylic
+-   A sheet of acrylic, no thicker than 1/8".
 -   Wood for the base and any flourishes you want for your lamps
 -   Custom SMD PCB (to be designed on oshpark.com)
 
