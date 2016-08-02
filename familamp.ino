@@ -1,4 +1,4 @@
-//#include "application.h"
+#include "application.h"
 
 #include "captouch.h"
 #include "neopixel/neopixel.h"
@@ -12,7 +12,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 CapTouch Touch(D3, D4);
 
-#define PIXEL_COUNT 30
+#define PIXEL_COUNT 300
 #define PIXEL_PIN D2
 #define PIXEL_TYPE WS2812
 
@@ -41,8 +41,9 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
 double lastColorUpdate = 0;       // Tracks when we last got sent a color
 uint32_t colorFromID;             // Tracks who sent the color
 uint32_t colorRecieved;           // Tracks the color recieved from another lamp
+bool lampOn = 0;                  // Tracks if the lamp is lit
 uint32_t activeColor = 0;         // 0 - 255, Tracks what color is currently active (default to red)
-uint32_t decayTime = 300;         // Turn off light after elapsed milliseconds
+uint32_t decayTime = 3000;         // Turn off light after elapsed milliseconds
 CapTouch::Event touchEvent;
 
 // Time Zone offset
@@ -54,7 +55,7 @@ void setup() {
     strip.begin();
     
     rainbowFull(10, 0); //0 is fade in
-    rainbowFull(10, 1); //1 is no fade
+//    rainbowFull(10, 1); //1 is no fade
     rainbowFull(10, 2); //2 is fade out
     Touch.setup();
 }
@@ -65,9 +66,11 @@ void loop() {
     if (touchEvent == CapTouch::TouchEvent) {
 		whileTouching();
 		sendColorUpdate(activeColor);
+		lampOn = 1;
 	}
-    if (Time.now() - lastColorUpdate > decayTime) {
+    if (Time.now() - lastColorUpdate > decayTime && lampOn == 1) {
         extinguish();
+        lampOn = 0;
     }
     delay(100);
 }
@@ -77,7 +80,6 @@ void whileTouching() {
         rainbowSingle(activeColor);
         activeColor++;
         activeColor %= 255;
-        delay(1);
         touchEvent = Touch.getEvent();
     }
 }
@@ -95,32 +97,37 @@ void gotColorUpdate(const char *name, const char *data) {
     char strBuffer[40] = "";
     str.toCharArray(strBuffer, 40);
     lastColorUpdate = Time.now();
+    lampOn = 1;
     //colorRecieved = atof(strtok(strBuffer, "~"));
     colorFromID = atof(strtok(strBuffer, "~"));
     colorRecieved = atof(strtok(NULL, "~"));
     setColor(colorRecieved);
-    activeColor = colorRecieved;
     String sColorFromID = String(colorFromID);
     String sColorRecieved = String(colorRecieved);
     Particle.publish("VarRec", sColorFromID + "~" + sColorRecieved);
 }
 
 void setColor(uint32_t c) { // c is color
+    activeColor = c;
     uint32_t color = wheelColor(c, 255);
     for (uint16_t j = 0; j < strip.numPixels(); j++) {
 		strip.setPixelColor(j, color);
+		strip.show();
+		delay(1000/strip.numPixels());
     }
-    strip.show();
+    lampOn = 1;
+    lastColorUpdate = Time.now();
 }
 
 void extinguish() {
     for(uint16_t i=255; i>=0; i--) {
         uint32_t color = wheelColor(activeColor, i);
-        for (uint16_t j = 0; j < strip.numPixels(); j++) {
+        for (uint32_t j = 0; j < strip.numPixels(); j++) {
     		strip.setPixelColor(j, color);
         }
+        strip.show();
     }
-    
+    lampOn = 0;
 }
 
 /*uint32_t Wheel(byte WheelPos) {
@@ -186,3 +193,4 @@ void rainbowSingle(byte c) {
     }
     strip.show();
 }
+
