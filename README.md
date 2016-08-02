@@ -22,7 +22,7 @@ Networked lamps using a Particle Photon, WB2812B LEDs, and custom touch-sensitiv
 ---------------------
 -   Particle's Butt
 -   NeoPixel Library
--   CapacitiveSensor sample: https://github.com/TangibitStudios/spark/tree/master/touch_sense
+-   CapSense library: https://github.com/lbt/captouch
 
 ### Assembly
 ---------------------
