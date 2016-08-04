@@ -12,7 +12,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 CapTouch Touch(D3, D4);
 
-#define PIXEL_COUNT 300
+#define PIXEL_COUNT 60
 #define PIXEL_PIN D2
 #define PIXEL_TYPE WS2812
 
@@ -70,7 +70,6 @@ void loop() {
 	}
     if (Time.now() - lastColorUpdate > decayTime && lampOn == 1) {
         extinguish();
-        lampOn = 0;
     }
     delay(100);
 }
@@ -120,7 +119,7 @@ void setColor(uint32_t c) { // c is color
 }
 
 void extinguish() {
-    for(uint16_t i=255; i>=0; i--) {
+    for(uint16_t i=255; i>0; i--) {
         uint32_t color = wheelColor(activeColor, i);
         for (uint32_t j = 0; j < strip.numPixels(); j++) {
     		strip.setPixelColor(j, color);
@@ -193,4 +192,3 @@ void rainbowSingle(byte c) {
     }
     strip.show();
 }
-
