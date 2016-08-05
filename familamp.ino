@@ -73,7 +73,7 @@ void loop() {
 }
 
 void whileTouching() {
-    byte activePixels = 1; // Tracks number of active pixels
+    byte activePixels = 0; // Tracks number of active pixels, 0 is first pixel
     while (touchEvent != CapTouch::ReleaseEvent) {
         rainbowSingle(activeColor, activePixels);
         activeColor++;
@@ -177,7 +177,8 @@ void rainbowFull(byte wait, byte fade) {
 
 void rainbowSingle(uint16_t c, byte j) {
     for(byte i = 0; i < j; i++) {
-      strip.setPixelColor(j - i, wheelColor(((i * 60 / strip.numPixels()) + c) & 255, 255));
+      // "- 10" below backs the color off a bit so that the color shown is a few behind the activeColor
+      strip.setPixelColor(j - i, wheelColor(((i * 60 / strip.numPixels()) + c - 10) & 255, 255));
     }
     strip.show();
 }
