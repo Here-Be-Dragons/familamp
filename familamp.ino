@@ -38,12 +38,13 @@ CapTouch Touch(D3, D4);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
 
 
-double lastColorUpdate = 0;       // Epoch of last color update (local + remote)
+double lastColorUpdate = 0;     // Epoch of last color update (local + remote)
 String colorFromID;             // String, Tracks who sent the color
-uint16_t colorRecieved;           // 0 - 255, Tracks the color recieved from another lamp
-bool lampOn = 0;                  // Tracks if the lamp is lit
-uint16_t activeColor = 0;         // 0 - 255, Tracks what color is currently active (default to red)
-uint32_t decayTime = 30;         // Turn off light after elapsed seconds
+uint16_t colorRecieved;         // 0 - 255, Tracks the color recieved from another lamp
+bool lampOn = 0;                // Tracks if the lamp is lit
+uint16_t activeColor = 0;       // 0 - 255, Tracks what color is currently active (default to red)
+uint32_t decayTime = 30;        // Turn off light after elapsed seconds
+uint16_t lampBrightness = 0;    // 0 - 255, Tracks current lamp brightness
 CapTouch::Event touchEvent;
 
 // Time Zone offset
