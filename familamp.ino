@@ -6,7 +6,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 //PRODUCT_ID and PRODUCT_VERSION required for Particle's "Productions" feature
 PRODUCT_ID(639);
-PRODUCT_VERSION(1);
+PRODUCT_VERSION(3);
 
 // Define which pins are connected with a 1-10M resistor.
 // The first pin will be connected to the touch sensor
@@ -49,7 +49,9 @@ uint8_t activeColor = 0;        // 0 - 255, Tracks what color is currently activ
 uint8_t activeR = 255;          // 0 - 255, Red component of activeColor;
 uint8_t activeG = 0;            // 0 - 255, Green component of activeColor;
 uint8_t activeB = 0;            // 0 - 255, Blue component of activeColor;
-uint32_t decayTime = 180;       // Turn off light after elapsed seconds
+uint32_t decayTime = 3600;      // Turn off light after elapsed seconds
+uint32_t decayDelay = 5;        // Seconds between decay fade-out
+uint32_t decayDelayCounter = 0; // Tracker for decayDelay
 int16_t lampBrightness = 0;     // 0 - 255, Tracks current lamp brightness
 CapTouch::Event touchEvent;
 
@@ -71,11 +73,14 @@ void loop() {
 
     if (touchEvent == CapTouch::TouchEvent) {
 		whileTouching();
-		setColor(activeColor);
-		sendColorUpdate();
 	}
     if (Time.now() - lastColorUpdate > decayTime && lampOn == 1) {
-        extinguish();
+        if (decayDelayCounter >= decayDelay) {
+            extinguish();
+            decayDelayCounter = 0;
+        } else {
+            decayDelayCounter++;
+        }
     }
     //delay(1);
 }
@@ -103,9 +108,11 @@ void whileTouching() {
 	if (activePixels >= (strip.numPixels() - 10)) {
 		lampOn = 1;
 		activeColor = testColor;
+		sendColorUpdate();
 		lastColorUpdate = Time.now();
 	} else {
 	    lampBrightness = previousBrightness;
+	    setColor(activeColor);
 	}
 }
 
@@ -156,9 +163,10 @@ void setColor(byte c) { // c is color.  This function does a downwards fade + wi
             strip.setPixelColor(j, newR, newG, newB);
             //strip.setPixelColor(strip.numPixels() - j, color);
         }
-        strip.show(); // Putting this in the for loop causes a chase-style update
+        strip.show();
         delay(10);
     }
+    activeColor = color;
 }
 
 void extinguish() { //Dims the lamp by one unit until lampBrightness is 0 and lampOn is 0
