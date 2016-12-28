@@ -6,12 +6,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 //PRODUCT_ID and PRODUCT_VERSION required for Particle's "Productions" feature
 PRODUCT_ID(639);
-PRODUCT_VERSION(3);
-
-// Define which pins are connected with a 1-10M resistor.
-// The first pin will be connected to the touch sensor
-// and must be D0, D1, D2, D3, D4 A0, A1, A3, A4, A5, A6, A7
-// see: http://docs.spark.io/firmware/#interrupts-attachinterrupt
+PRODUCT_VERSION(7);
 
 CapTouch Touch(D3, D4);
 
@@ -19,27 +14,7 @@ CapTouch Touch(D3, D4);
 #define PIXEL_PIN D2
 #define PIXEL_TYPE WS2812
 
-// Parameter 1 = number of pixels in strip
-//               note: for some stripes like those with the TM1829, you
-//                     need to count the number of segments, i.e. the
-//                     number of controllers in your stripe, not the number
-//                     of individual LEDs!
-// Parameter 2 = pin number (most are valid)
-//               note: if not specified, D2 is selected for you.
-// Parameter 3 = pixel type [ WS2812, WS2812B, WS2811, TM1803, TM1829 ]
-//               note: if not specified, WS2812B is selected for you.
-//               note: RGB order is automatically applied to WS2811,
-//                     WS2812/WS2812B/TM1803 is GRB order.
-//
-// 800 KHz bitstream 800 KHz bitstream (most NeoPixel products ...
-//                         ... WS2812 (6-pin part)/WS2812B (4-pin part) )
-//
-// 400 KHz bitstream (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
-//                   (Radio Shack Tri-Color LED Strip - TM1803 driver
-//                    NOTE: RS Tri-Color LED's are grouped in sets of 3)
-
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
-
 
 double lastColorUpdate = 0;     // Epoch of last color update (local or remote)
 String colorFromID;             // String, Tracks who sent the color (for debug)
@@ -49,57 +24,68 @@ uint8_t activeColor = 0;        // 0 - 255, Tracks what color is currently activ
 uint8_t activeR = 255;          // 0 - 255, Red component of activeColor;
 uint8_t activeG = 0;            // 0 - 255, Green component of activeColor;
 uint8_t activeB = 0;            // 0 - 255, Blue component of activeColor;
-uint32_t decayTime = 3600;      // Turn off light after elapsed seconds
-uint32_t decayDelay = 5;        // Seconds between decay fade-out
-uint32_t decayDelayCounter = 0; // Tracker for decayDelay
+uint32_t decayTime = 3000;      // Turn off light after elapsed seconds
+uint32_t decayDelay = 2;        // Seconds between decay fade-out
+double lastDecayDelay = 0;      // Time Tracker for decayDelay
 int16_t lampBrightness = 0;     // 0 - 255, Tracks current lamp brightness
+uint8_t fadeColor = 0;          // Track color for special events
+byte activePixels = 0;          // Tracks number of active pixels, 0 is first pixel
+float redStates[PIXEL_COUNT];   // New Years Variable
+float blueStates[PIXEL_COUNT];  // New Years Variable
+float greenStates[PIXEL_COUNT]; // New Years Variable
+float fadeRate = 0.95;          // New Years Variable: 0.01-0.99, controls decay speed
 CapTouch::Event touchEvent;
-
-// Time Zone offset
-//int32_t timeZone = -5;
 
 void setup() {
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
     strip.begin();
-//    strip.setBrightness(50);
     rainbowFull(5, 0); // 10ms Delay, 0 is fade in //TODO change to longer before finalizing
     rainbowFull(5, 2); // 10ms Delay, 2 is fade out //TODO change to longer before finalizing
     Touch.setup();
+    //TODO: Logic for each lamp to correct timezone.
+    Time.zone(-5);
 }
 
 void loop() {
     touchEvent = Touch.getEvent();
 
     if (touchEvent == CapTouch::TouchEvent) {
+        activePixels = 0;
 		whileTouching();
 	}
     if (Time.now() - lastColorUpdate > decayTime && lampOn == 1) {
-        if (decayDelayCounter >= decayDelay) {
+        if (Time.now() - lastDecayDelay >= decayDelay) {
             extinguish();
-            decayDelayCounter = 0;
-        } else {
-            decayDelayCounter++;
+            lastDecayDelay = Time.now();
         }
     }
-    //delay(1);
+    // Special idle function for Christmas Day
+    if (lampOn == 0 && Time.day() == 25 && Time.month() == 12) {
+        lampBrightness = 10;
+        idleChristmas();
+        delay(20);
+    }
+    // Special idle function for New Years Day
+    if (lampOn == 0 && Time.day() == 1 && Time.month() == 1) {
+        lampBrightness = 40;
+        idleNewYears();
+    }
 }
 
 void whileTouching() {
-    byte activePixels = 0; // Tracks number of active pixels, 0 is first pixel
     byte previousBrightness = lampBrightness; // Store the previous brightness in case we need it later
     uint16_t pixelBrightness = lampBrightness; // Tracks the given pixel's brightness.  Needs to track > 255, so uint16_t
 	uint8_t testColor = activeColor; // Start with the current color
     while (touchEvent != CapTouch::ReleaseEvent) {
         for (byte i = 0; i <= activePixels; i++) {
-            pixelBrightness = lampBrightness + i;// (i * 5); //Fade to full brightness
+            pixelBrightness = lampBrightness + i; //Fade to full brightness
 			if (pixelBrightness > 255) pixelBrightness = 255; //catch overflow
             // "activePixels - i" reverses the direction
             strip.setPixelColor(activePixels - i, wheelColor(((i * 60 / strip.numPixels()) + testColor) & 255, pixelBrightness)); // "& 255" AKA bitwise and prevents overflow
 	    }
         strip.show();
         testColor++; //because testColor is uint8_t, automatically loops at 256
-        //+100 is a hack for the pixelBrightness to eventually get to 255 on the last pixel
         if(activePixels < (strip.numPixels() - 1)) activePixels++; //Add 1 for next iteration, but prevent looping around
         if(lampBrightness < 255) lampBrightness++;
         touchEvent = Touch.getEvent();
@@ -117,7 +103,6 @@ void whileTouching() {
 }
 
 void sendColorUpdate() {
-    //char publishString[40];
     String sColor = String(activeColor);
     Particle.publish("FamiLamp_Update", System.deviceID() + "~" + sColor, 60, PRIVATE);
 }
@@ -151,22 +136,15 @@ void setColor(byte c) { // c is color.  This function does a downwards fade + wi
             startR = (uint8_t)((startRGB >> 16) & 0xff); // Splits out current color into separate R, G, B
             startG = (uint8_t)((startRGB >> 8) & 0xff);
             startB = (uint8_t)(startRGB & 0xff);
-            //if (j < strip.numPixels()) {
-                newR = startR + (endR - startR) * fade / 255;// / strip.numPixels();// Color mixer
-                newG = startG + (endG - startG) * fade / 255;// / strip.numPixels();
-                newB = startB + (endB - startB) * fade / 255;// / strip.numPixels();
-            //} else {
-            //    newR = endR;
-            //    newG = endG;
-            //    newB = endB;
-            //}
+            newR = startR + (endR - startR) * fade / 255; // Color mixer
+            newG = startG + (endG - startG) * fade / 255;
+            newB = startB + (endB - startB) * fade / 255;
             strip.setPixelColor(j, newR, newG, newB);
-            //strip.setPixelColor(strip.numPixels() - j, color);
         }
         strip.show();
         delay(10);
     }
-    activeColor = color;
+    activeColor = c;
 }
 
 void extinguish() { //Dims the lamp by one unit until lampBrightness is 0 and lampOn is 0
@@ -231,8 +209,98 @@ void rainbowSingle(uint16_t c, byte j) { //(active color, active pixels)
     uint16_t b; //track brightness for this interation
     for(byte i = 0; i <= j; i++) {
       // "- 10" below backs the color off a bit so that the color shown is a few behind the activeColor
-     
       strip.setPixelColor(j - i, wheelColor(((i * 60 / strip.numPixels()) + c - 10) & 255, b)); // "& 255" AKA bitwise and prevents overflow 
+    }
+    strip.show();
+}
+
+void idleChristmas() {
+    uint16_t currR, currG, currB, endR, endG, endB;
+    uint32_t color = wheelColor(fadeColor, lampBrightness);
+    endR = (uint16_t)((color >> 16) & 0xff); // Splits out new color into separate R, G, B
+    endG = (uint16_t)((color >> 8) & 0xff);
+    endB = (uint16_t)(color & 0xff);
+    for (uint16_t j = 0; j < activePixels; j++) {
+        long startRGB = strip.getPixelColor(j); // Get pixel's current color
+        currR = (uint16_t)((startRGB >> 16) & 0xff); // Splits out current color into separate R, G, B
+        currG = (uint16_t)((startRGB >> 8) & 0xff);
+        currB = (uint16_t)(startRGB & 0xff);
+        if ( currR > endR ) {
+            currR = currR - 1;
+        } else if ( currR < endR ) {
+            currR = currR + 1;
+        } else {
+            currR = endR;
+        }
+        if ( currG > endG ) {
+            currG = currG - 1;
+        } else if ( currG < endG ) {
+            currG = currG + 1;
+        } else {
+            currG = endG;
+        }
+        if ( currB > endB ) {
+            currB = currB - 1;
+        } else if ( currB < endB ) {
+            currB = currB + 1;
+        } else {
+            currB = endB;
+        }
+        
+        //Catch overflows
+        currR %= 255;
+        currG %= 255;
+        currB %= 255;
+
+        strip.setPixelColor(j, currR, currG, currB);
+        if ( j >= strip.numPixels() - 1 && endR == currR && endG == currG && endB == currB) {
+            if ( fadeColor == 0 ) {
+                fadeColor = 85;
+            } else {
+                fadeColor = 0;
+            }
+            activePixels = 0;
+        }
+    }
+    strip.show();
+    if ( activePixels < strip.numPixels() ) activePixels++;
+}
+
+void idleNewYears() {
+       if (random(20) == 1) {
+      uint16_t i = random(strip.numPixels());
+      if (redStates[i] < 1 && greenStates[i] < 1 && blueStates[i] < 1) {
+        redStates[i] = random(lampBrightness);
+        greenStates[i] = random(lampBrightness);
+        blueStates[i] = random(lampBrightness);
+      }
+    }
+    
+    for(uint16_t l = 0; l < strip.numPixels(); l++) {
+      if (redStates[l] > 1 || greenStates[l] > 1 || blueStates[l] > 1) {
+        strip.setPixelColor(l, redStates[l], greenStates[l], blueStates[l]);
+        
+        if (redStates[l] > 1) {
+          redStates[l] = redStates[l] * fadeRate;
+        } else {
+          redStates[l] = 0;
+        }
+        
+        if (greenStates[l] > 1) {
+          greenStates[l] = greenStates[l] * fadeRate;
+        } else {
+          greenStates[l] = 0;
+        }
+        
+        if (blueStates[l] > 1) {
+          blueStates[l] = blueStates[l] * fadeRate;
+        } else {
+          blueStates[l] = 0;
+        }
+        
+      } else {
+        strip.setPixelColor(l, 0, 0, 0);
+      }
     }
     strip.show();
 }
