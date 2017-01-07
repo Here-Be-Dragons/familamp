@@ -6,7 +6,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 //PRODUCT_ID and PRODUCT_VERSION required for Particle's "Products" feature
 PRODUCT_ID(639);
-PRODUCT_VERSION(8);
+PRODUCT_VERSION(9);
 
 CapTouch Touch(D3, D4);
 
@@ -20,52 +20,64 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
 // User Variables
 ////
 
-uint32_t decayTime = 3000;          // Start dimming light after elapsed seconds
-uint32_t decayDelay = 2;            // Seconds between decay fade-out steps
-uint16_t maxDayBrightness = 255;    // 0 - 255, lamp will not exceed this during the day
-uint16_t maxNightBrightness = 70;   // 0 - 255, lamp will not exceed this during the night
-float fadeRate = 0.95;              // Fireworks Variable: 0.01-0.99, controls decay speed
+uint32_t decayTime = 2835;                  // Start dimming light after elapsed seconds
+uint32_t decayDelay = 3;                    // Seconds between decay fade-out steps
+uint8_t nightHours[2] = {6,      21};       // Night mode starts at nightHours[1], ends at nightHours[0]
+uint8_t duskHours[2] =  {  7,  19  };       // Dusk mode starts at duskHours[1], ends at duskHours[0].  Needs to be inside nightHours' times.
+                                            // Day mode starts at duskHours[0], ends at duskHours[1]
+uint16_t maxDayBrightness = 255;            // 0 - 255, lamp will not exceed this during the day
+uint16_t maxDuskBrightness = 70;            // 0 - 255, lamp will not exceed this during dusk
+uint16_t maxNightBrightness = 40;           // 0 - 255, lamp will not exceed this during the night
+float fadeRate = 0.95;                      // Fireworks Variable: 0.01-0.99, controls decay speed
 
 ////
 // End User Variables
 ////
 
-
-double lastColorUpdate = 0;         // Epoch of last color update (local or remote)
-String colorFromID;                 // String, Tracks who sent the color (for debug)
-uint16_t colorRecieved;             // 0 - 255, Tracks the color received from another lamp
-bool lampOn = 0;                    // Tracks if the lamp is lit
-uint8_t activeColor = 0;            // 0 - 255, Tracks what color is currently active (start at red)
-uint8_t activeR = 255;              // 0 - 255, Red component of activeColor;
-uint8_t activeG = 0;                // 0 - 255, Green component of activeColor;
-uint8_t activeB = 0;                // 0 - 255, Blue component of activeColor;
-double lastDecayDelay = 0;          // Time Tracker for decayDelay
-uint16_t lampBrightness = 0;        // 0 - 255, Tracks current lamp brightness
-uint16_t maxBrightness = maxDayBrightness; // Assigned the current max brightness
-bool isNight = 0;                   // Track day/night condition
-uint8_t fadeColor = 0;              // Track color for special events
-byte activePixels = 0;              // Tracks number of active pixels, 0 is first pixel
-float redStates[PIXEL_COUNT];       // Fireworks Variable
-float blueStates[PIXEL_COUNT];      // Fireworks Variable
-float greenStates[PIXEL_COUNT];     // Fireworks Variable
+double lastColorUpdate = 0;                 // Epoch of last color update (local or remote)
+String colorFromID;                         // String, Tracks who sent the color (for debug)
+uint16_t colorRecieved;                     // 0 - 255, Tracks the color received from another lamp
+bool lampOn = 0;                            // Tracks if the lamp is lit
+uint8_t activeColor = 0;                    // 0 - 255, Tracks what color is currently active (start at red)
+uint8_t activeR = 255;                      // 0 - 255, Red component of activeColor;
+uint8_t activeG = 0;                        // 0 - 255, Green component of activeColor;
+uint8_t activeB = 0;                        // 0 - 255, Blue component of activeColor;
+double lastDecayDelay = 0;                  // Time Tracker for decayDelay
+uint16_t lampBrightness = 0;                // 0 - 255, Tracks current lamp brightness
+uint16_t maxBrightness = maxDayBrightness;  // Assigned the current max brightness
+uint8_t dayTrack = 0;                       // Track day/dusk/night condition
+uint8_t fadeColor = 0;                      // Track color for special events
+byte activePixels = 0;                      // Tracks number of active pixels, 0 is first pixel
+float redStates[PIXEL_COUNT];               // Fireworks Variable
+float blueStates[PIXEL_COUNT];              // Fireworks Variable
+float greenStates[PIXEL_COUNT];             // Fireworks Variable
 CapTouch::Event touchEvent;
 
 void setup() {
     strip.begin();
     strip.show();
+    rainbowFull(5, 0); // 5ms Delay, 0 is fade in
+    rainbowFull(5, 2); // 5ms Delay, 2 is fade out
+    
+    Touch.setup();
+    
+    // Timezone for each lamp
+    if (System.deviceID() == "2a002b001647353236343033" || System.deviceID() == "1d0029000947353138383138") {
+        Time.zone(-6);
+    } else if (System.deviceID() == "TODO hawaii device ID") {
+        Time.zone(-10);
+    } else {
+        Time.zone(-5);
+    }
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
-    rainbowFull(5, 0); // 10ms Delay, 0 is fade in //TODO change to longer before finalizing
-    rainbowFull(5, 2); // 10ms Delay, 2 is fade out //TODO change to longer before finalizing
-    Touch.setup();
-    Time.zone(-5);
 }
 
 void loop() {
+    dayTracking();
     touchEvent = Touch.getEvent();
 
     if (touchEvent == CapTouch::TouchEvent) {
-        activePixels = 0;
 		whileTouching();
 	}
     if (Time.now() - lastColorUpdate > decayTime && lampOn == 1) {
@@ -74,39 +86,41 @@ void loop() {
             lastDecayDelay = Time.now();
         }
     }
-    if (Time.hour() < 7 || Time.hour() > 20) {
-        if (isNight == 0) {
-            maxBrightness = maxNightBrightness;
-            if (lampBrightness > maxBrightness) lampBrightness = maxBrightness;
-            setColor(activeColor);
-            isNight = 1;
+    
+    // Special idle functions
+    if (lampOn == 0) {
+        // Christmas Day
+        if (Time.day() == 25 && Time.month() == 12) {
+            idleColorFader(0,85);
         }
-    } else {
-        if (isNight == 1) {
-            maxBrightness = maxDayBrightness;
-            if (lampBrightness > maxBrightness) lampBrightness = maxBrightness;
-            setColor(activeColor);
-            isNight = 0;
+        // St. Patricks Day
+        if (Time.day() == 17 && Time.month() == 3) {
+            idleColorFader(0,42);
         }
-    }
-    // Special idle function for Christmas Day
-    if (lampOn == 0 && Time.day() == 25 && Time.month() == 12) {
-        lampBrightness = 10;
-        idleChristmas();
-        delay(20);
-    }
-    // Special idle function for New Years Day
-    if (lampOn == 0 && ( Time.day() == 1 && Time.month() == 1 ) || ( Time.day() == 4 && Time.month() == 7 )) {
-        lampBrightness = 40;
-        idleNewYears();
-    }
-    // Clear any previous day's special idles
-    if (lampOn == 0 && lampBrightness != 0 && Time.hour() == 0 && Time.minute() == 0 && Time.second() <= 3) {
-        for (uint16_t i = 0; i < strip.numPixels(); i++) {
-            strip.setPixelColor(i, 0, 0, 0);
+        // Valentines Day
+        if (Time.day() == 14 && Time.month() == 2) {
+            idleColorFader(85,100);
         }
-        strip.show();
-        lampBrightness = 0;
+        // 4th of July
+        if ( Time.day() == 4 && Time.month() == 7 ) {
+            idleFireworks(0);
+        }
+        // New Years Day
+        if ( Time.day() == 1 && Time.month() == 1 ) {
+            idleFireworks(1);
+        }
+        // Birthdays
+        if ( Time.day() == 7 && Time.month() == 1 ) {
+            idleDisco();
+        }
+        // Clear any previous day's special idles
+        if (lampBrightness != 0 && Time.hour() == 0 && Time.minute() == 0 && Time.second() <= 3) {
+            for (uint16_t i = 0; i < strip.numPixels(); i++) {
+                strip.setPixelColor(i, 0, 0, 0);
+            }
+            strip.show();
+            lampBrightness = 0;
+        }
     }
 }
 
@@ -114,6 +128,7 @@ void whileTouching() {
     byte previousBrightness = lampBrightness; // Store the previous brightness in case we need it later
     uint16_t pixelBrightness = lampBrightness; // Tracks the given pixel's brightness.  Needs to track > 255, so uint16_t
 	uint8_t testColor = activeColor; // Start with the current color
+    activePixels = 0;
     while (touchEvent != CapTouch::ReleaseEvent) {
         for (byte i = 0; i <= activePixels; i++) {
             pixelBrightness = lampBrightness + i; //Fade to full brightness
@@ -129,7 +144,7 @@ void whileTouching() {
         delay(3);
     }
 	if (activePixels >= (strip.numPixels() - 10)) {
-		lampOn = 1;
+	    lampOn = 1;
 		activeColor = testColor;
 		sendColorUpdate();
 		lastColorUpdate = Time.now();
@@ -145,7 +160,7 @@ void sendColorUpdate() {
 }
 
 void gotColorUpdate(const char *name, const char *data) {
-    
+
     String str = String(data);
     char strBuffer[40] = "";
     str.toCharArray(strBuffer, 40);
@@ -242,16 +257,33 @@ void rainbowFull(byte wait, byte fade) {
   }
 }
 
-/*void rainbowSingle(uint16_t c, byte j) { //(active color, active pixels)
-    uint16_t b; //track brightness for this interation
-    for(byte i = 0; i <= j; i++) {
-      // "- 10" below backs the color off a bit so that the color shown is a few behind the activeColor
-      strip.setPixelColor(j - i, wheelColor(((i * 60 / strip.numPixels()) + c - 10) & 255, b)); // "& 255" AKA bitwise and prevents overflow 
+void dayTracking() {
+    if (Time.hour() < nightHours[0] || Time.hour() >= nightHours[1]) { // Night hours
+        if (dayTrack != 2) {
+            maxBrightness = maxNightBrightness;
+            if (lampBrightness > maxBrightness) lampBrightness = maxBrightness;
+            setColor(activeColor);
+            dayTrack = 2;
+        }
+    } else if (Time.hour() < duskHours[0] || Time.hour() >= duskHours[2]) { // Dusk hours
+        if (dayTrack != 1) {
+            maxBrightness = maxDuskBrightness;
+            if (lampBrightness > maxBrightness) lampBrightness = maxBrightness;
+            setColor(activeColor);
+            dayTrack = 1;
+        }
+    } else { // Everything else is day
+        if (dayTrack != 0) {
+            maxBrightness = maxDayBrightness;
+            if (lampBrightness > maxBrightness) lampBrightness = maxBrightness;
+            setColor(activeColor);
+            dayTrack = 0;
+        }
     }
-    strip.show();
-}*/
+}
 
-void idleChristmas() {
+void idleColorFader(uint8_t c1, uint8_t c2) {
+    lampBrightness = 10;
     uint16_t currR, currG, currB, endR, endG, endB;
     uint32_t color = wheelColor(fadeColor, lampBrightness);
     endR = (uint16_t)((color >> 16) & 0xff); // Splits out new color into separate R, G, B
@@ -291,53 +323,72 @@ void idleChristmas() {
 
         strip.setPixelColor(j, currR, currG, currB);
         if ( j >= strip.numPixels() - 1 && endR == currR && endG == currG && endB == currB) {
-            if ( fadeColor == 0 ) {
-                fadeColor = 85;
+            if ( fadeColor == c1 ) {
+                fadeColor = c2;
             } else {
-                fadeColor = 0;
+                fadeColor = c1;
             }
             activePixels = 0;
         }
     }
     strip.show();
     if ( activePixels < strip.numPixels() ) activePixels++;
+    delay(20);
 }
 
-void idleNewYears() {
-       if (random(20) == 1) {
-      uint16_t i = random(strip.numPixels());
-      if (redStates[i] < 1 && greenStates[i] < 1 && blueStates[i] < 1) {
-        redStates[i] = random(lampBrightness);
-        greenStates[i] = random(lampBrightness);
-        blueStates[i] = random(lampBrightness);
-      }
+void idleFireworks(uint8_t w) {
+    // w = 0 for mulitcolor, w = 1 for all white flashes
+    lampBrightness = 40;
+    if (random(20) == 1) {
+        uint16_t i = random(strip.numPixels());
+        if (redStates[i] < 1 && greenStates[i] < 1 && blueStates[i] < 1) {
+            if (w == 0){
+                redStates[i] = random(lampBrightness);
+                greenStates[i] = random(lampBrightness);
+                blueStates[i] = random(lampBrightness);
+            } else {
+                redStates[i] = lampBrightness;
+                greenStates[i] = lampBrightness;
+                blueStates[i] = lampBrightness;
+            }
+        }
     }
-    
     for(uint16_t l = 0; l < strip.numPixels(); l++) {
-      if (redStates[l] > 1 || greenStates[l] > 1 || blueStates[l] > 1) {
-        strip.setPixelColor(l, redStates[l], greenStates[l], blueStates[l]);
+        if (redStates[l] > 1 || greenStates[l] > 1 || blueStates[l] > 1) {
+            strip.setPixelColor(l, redStates[l], greenStates[l], blueStates[l]);
+            if (redStates[l] > 1) {
+                redStates[l] = redStates[l] * fadeRate;
+            } else {
+                redStates[l] = 0;
+            }
         
-        if (redStates[l] > 1) {
-          redStates[l] = redStates[l] * fadeRate;
+            if (greenStates[l] > 1) {
+                greenStates[l] = greenStates[l] * fadeRate;
+            } else {
+                greenStates[l] = 0;
+            }
+        
+            if (blueStates[l] > 1) {
+                blueStates[l] = blueStates[l] * fadeRate;
+            } else {
+                blueStates[l] = 0;
+            }
+        
         } else {
-          redStates[l] = 0;
+            strip.setPixelColor(l, 0, 0, 0);
         }
-        
-        if (greenStates[l] > 1) {
-          greenStates[l] = greenStates[l] * fadeRate;
-        } else {
-          greenStates[l] = 0;
-        }
-        
-        if (blueStates[l] > 1) {
-          blueStates[l] = blueStates[l] * fadeRate;
-        } else {
-          blueStates[l] = 0;
-        }
-        
-      } else {
-        strip.setPixelColor(l, 0, 0, 0);
-      }
     }
     strip.show();
+}
+void idleDisco() {
+    lampBrightness = 20;
+    for(int i=0; i<strip.numPixels(); i++) {
+        int randr = random(0,lampBrightness);
+        int randg = random(0,lampBrightness); 
+        int randb = random(0,lampBrightness);
+        int randi = random(0,(strip.numPixels() - 1));
+        strip.setPixelColor(randi, randr, randg, randb);
+        strip.show();
+        delay(5);
+    }
 }
