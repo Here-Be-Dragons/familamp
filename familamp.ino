@@ -27,7 +27,7 @@ uint8_t duskHours[2] =  {  7,  19  };       // Dusk mode starts at duskHours[1],
                                             // Day mode starts at duskHours[0], ends at duskHours[1]
 uint16_t maxDayBrightness = 255;            // 0 - 255, lamp will not exceed this during the day
 uint16_t maxDuskBrightness = 70;            // 0 - 255, lamp will not exceed this during dusk
-uint16_t maxNightBrightness = 40;           // 0 - 255, lamp will not exceed this during the night
+uint16_t maxNightBrightness = 30;           // 0 - 255, lamp will not exceed this during the night
 float fadeRate = 0.95;                      // Fireworks Variable: 0.01-0.99, controls decay speed
 
 ////
@@ -60,15 +60,7 @@ void setup() {
     rainbowFull(5, 2); // 5ms Delay, 2 is fade out
     
     Touch.setup();
-    
-    // Timezone for each lamp
-    if (System.deviceID() == "2a002b001647353236343033" || System.deviceID() == "1d0029000947353138383138") {
-        Time.zone(-6);
-    } else if (System.deviceID() == "TODO hawaii device ID") {
-        Time.zone(-10);
-    } else {
-        Time.zone(-5);
-    }
+    Time.zone(-5);
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
 }
@@ -99,7 +91,7 @@ void loop() {
         }
         // Valentines Day
         if (Time.day() == 14 && Time.month() == 2) {
-            idleColorFader(85,100);
+            idleColorFader(85,120);
         }
         // 4th of July
         if ( Time.day() == 4 && Time.month() == 7 ) {
@@ -110,7 +102,9 @@ void loop() {
             idleFireworks(1);
         }
         // Birthdays
-        if ( Time.day() == 7 && Time.month() == 1 ) {
+        if (
+            (Time.day() == 22 && Time.month() == 2) 
+            ) {
             idleDisco();
         }
         // Clear any previous day's special idles
@@ -265,7 +259,7 @@ void dayTracking() {
             setColor(activeColor);
             dayTrack = 2;
         }
-    } else if (Time.hour() < duskHours[0] || Time.hour() >= duskHours[2]) { // Dusk hours
+    } else if (Time.hour() < duskHours[0] || Time.hour() >= duskHours[1]) { // Dusk hours
         if (dayTrack != 1) {
             maxBrightness = maxDuskBrightness;
             if (lampBrightness > maxBrightness) lampBrightness = maxBrightness;
