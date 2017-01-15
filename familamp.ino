@@ -6,7 +6,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 //PRODUCT_ID and PRODUCT_VERSION required for Particle's "Products" feature
 PRODUCT_ID(639);
-PRODUCT_VERSION(9);
+PRODUCT_VERSION(11);
 
 CapTouch Touch(D3, D4);
 
@@ -25,7 +25,7 @@ uint32_t decayDelay = 3;                    // Seconds between decay fade-out st
 uint8_t nightHours[2] = {6,      21};       // Night mode starts at nightHours[1], ends at nightHours[0]
 uint8_t duskHours[2] =  {  7,  19  };       // Dusk mode starts at duskHours[1], ends at duskHours[0].  Needs to be inside nightHours' times.
                                             // Day mode starts at duskHours[0], ends at duskHours[1]
-uint16_t maxDayBrightness = 255;            // 0 - 255, lamp will not exceed this during the day
+uint16_t maxDayBrightness = 180;            // 0 - 255, lamp will not exceed this during the day
 uint16_t maxDuskBrightness = 70;            // 0 - 255, lamp will not exceed this during dusk
 uint16_t maxNightBrightness = 30;           // 0 - 255, lamp will not exceed this during the night
 float fadeRate = 0.95;                      // Fireworks Variable: 0.01-0.99, controls decay speed
@@ -60,6 +60,7 @@ void setup() {
     rainbowFull(5, 2); // 5ms Delay, 2 is fade out
     
     Touch.setup();
+    
     Time.zone(-5);
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
@@ -103,7 +104,7 @@ void loop() {
         }
         // Birthdays
         if (
-            (Time.day() == 22 && Time.month() == 2) 
+            (Time.day() == 22 && Time.month() == 2)
             ) {
             idleDisco();
         }
@@ -171,24 +172,28 @@ void gotColorUpdate(const char *name, const char *data) {
 }
 
 void setColor(byte c) { // c is color.  This function does a smooth fade new color
-    uint8_t newR, newG, newB, startR, startG, startB, endR, endG, endB;
-    uint32_t color = wheelColor(c, lampBrightness);
-    endR = (uint8_t)((color >> 16) & 0xff); // Splits out new color into separate R, G, B
-    endG = (uint8_t)((color >> 8) & 0xff);
-    endB = (uint8_t)(color & 0xff);
-    for (uint16_t fade = 0; fade < 255; fade++) {
-        for (uint16_t j = 0; j < strip.numPixels(); j++) {
-            long startRGB = strip.getPixelColor(j); // Get pixel's current color
-            startR = (uint8_t)((startRGB >> 16) & 0xff); // Splits out current color into separate R, G, B
-            startG = (uint8_t)((startRGB >> 8) & 0xff);
-            startB = (uint8_t)(startRGB & 0xff);
-            newR = startR + (endR - startR) * fade / 255; // Color mixer
-            newG = startG + (endG - startG) * fade / 255;
-            newB = startB + (endB - startB) * fade / 255;
-            strip.setPixelColor(j, newR, newG, newB);
+    if (((Time.month() * Time.day()) % 256) == c) { // Semi-random formula to trigger easter egg
+        rainbowEasterEgg();
+    } else {
+        uint8_t newR, newG, newB, startR, startG, startB, endR, endG, endB;
+        uint32_t color = wheelColor(c, lampBrightness);
+        endR = (uint8_t)((color >> 16) & 0xff); // Splits out new color into separate R, G, B
+        endG = (uint8_t)((color >> 8) & 0xff);
+        endB = (uint8_t)(color & 0xff);
+        for (uint16_t fade = 0; fade < 255; fade++) {
+            for (uint16_t j = 0; j < strip.numPixels(); j++) {
+                long startRGB = strip.getPixelColor(j); // Get pixel's current color
+                startR = (uint8_t)((startRGB >> 16) & 0xff); // Splits out current color into separate R, G, B
+                startG = (uint8_t)((startRGB >> 8) & 0xff);
+                startB = (uint8_t)(startRGB & 0xff);
+                newR = startR + (endR - startR) * fade / 255; // Color mixer
+                newG = startG + (endG - startG) * fade / 255;
+                newB = startB + (endB - startB) * fade / 255;
+                strip.setPixelColor(j, newR, newG, newB);
+            }
+            strip.show();
+            delay(10);
         }
-        strip.show();
-        delay(10);
     }
     activeColor = c;
 }
@@ -251,6 +256,13 @@ void rainbowFull(byte wait, byte fade) {
   }
 }
 
+void rainbowEasterEgg() {
+    for(uint8_t i = 0; i <= strip.numPixels(); i++) {
+      strip.setPixelColor(i, wheelColor((i * 256 / strip.numPixels()) & 255, lampBrightness));
+    }
+    strip.show();
+}
+
 void dayTracking() {
     if (Time.hour() < nightHours[0] || Time.hour() >= nightHours[1]) { // Night hours
         if (dayTrack != 2) {
@@ -277,7 +289,7 @@ void dayTracking() {
 }
 
 void idleColorFader(uint8_t c1, uint8_t c2) {
-    lampBrightness = 10;
+    lampBrightness = 100;
     uint16_t currR, currG, currB, endR, endG, endB;
     uint32_t color = wheelColor(fadeColor, lampBrightness);
     endR = (uint16_t)((color >> 16) & 0xff); // Splits out new color into separate R, G, B
@@ -289,23 +301,23 @@ void idleColorFader(uint8_t c1, uint8_t c2) {
         currG = (uint16_t)((startRGB >> 8) & 0xff);
         currB = (uint16_t)(startRGB & 0xff);
         if ( currR > endR ) {
-            currR = currR - 1;
+            currR = currR - 10;
         } else if ( currR < endR ) {
-            currR = currR + 1;
+            currR = currR + 10;
         } else {
             currR = endR;
         }
         if ( currG > endG ) {
-            currG = currG - 1;
+            currG = currG - 10;
         } else if ( currG < endG ) {
-            currG = currG + 1;
+            currG = currG + 10;
         } else {
             currG = endG;
         }
         if ( currB > endB ) {
-            currB = currB - 1;
+            currB = currB - 10;
         } else if ( currB < endB ) {
-            currB = currB + 1;
+            currB = currB + 10;
         } else {
             currB = endB;
         }
@@ -375,7 +387,7 @@ void idleFireworks(uint8_t w) {
     strip.show();
 }
 void idleDisco() {
-    lampBrightness = 20;
+    lampBrightness = 40;
     for(int i=0; i<strip.numPixels(); i++) {
         int randr = random(0,lampBrightness);
         int randg = random(0,lampBrightness); 
