@@ -4,7 +4,7 @@
 
 ### Overview
 ---------------------
-Networked lamps using a Particle Photon, WB2812B LEDs (aka NeoPixels), and a touch-sensitive panel.  They communicate and synchronize colors across lamps via the internet and Particle's butt using Particle.subscribe() and Particle.publish() functions.  Bonus of using Particle's cloud: easily push updates and add features from Particle's browser-based IDE and Console.
+Networked lamps using a Particle Photon, WB2812B LEDs (aka NeoPixels), and a touch-sensitive panel.  They communicate and synchronize colors across lamps via the internet and Particle's cloud using Particle.subscribe() and Particle.publish() functions.  Bonus of using Particle's cloud: easily push updates and add features from Particle's browser-based IDE and Console.
 
 ### Images
 ---------------------
@@ -59,7 +59,7 @@ Circuit boards from Osh Park:
 -   Connect a capacitor (1000µF, 6.3V or higher) across VIN and GND on the Particle Photon, then connect VIN and GND to the corresponding NeoPixel pins.
     -   The 1000µF capacitor prevents the initial onrush of current from damaging the pixels over time.  I ended up using a 500µF capacitor instead so it would fit my design's physical contraints better.
 -   I used a 9" length of 1" PVC pipe to wrap the NeoPixels around, and hot-glued this into a hole in the top of the wood base.
-    -   Do not use hot glue to glue the NeoPixels to the PVC pipe.  Either buy the NeoPixels with 3M tape on the back or use something like silicone (do not power the pixels on until after the time indicated for complete dry time on the glue of choice to prevent shorting the pixels).  When I used hot glue, this caused the strip to stop working correctly.
+    -   Do not use hot glue to glue the NeoPixels to the PVC pipe.  Either buy the NeoPixels with 3M tape on the back or use something like silicone (do not power the pixels on until after the time indicated for complete dry time on the glue of choice to prevent shorting the pixels).  When I used hot glue, this caused the strip to stop working correctly
 
 ### Other Notes & Lessons Learned
 ---------------------
