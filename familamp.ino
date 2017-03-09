@@ -43,6 +43,8 @@ uint16_t lampBrightness = 0;                // 0 - 255, Tracks current lamp brig
 uint16_t maxBrightness = maxDayBrightness;  // Assigned the current max brightness
 uint8_t dayTrack = 0;                       // Track day/dusk/night condition
 byte activePixels = 0;                      // Tracks number of active pixels, 0 is first pixel
+uint8_t lastDay = 0;                        // Used to track if onceADay() has run yet today
+uint8_t lastHour = 0;                        // Used to track if onceAnHour() has run yet this hour
 
 // Variables for special effects
 uint32_t consecutiveChanges = 0;            // Track how many times the color has been changed before turning off
@@ -54,6 +56,8 @@ float fadeRate = 0.95;                      // Fireworks Variable: 0.01-0.99, co
 uint8_t heartbeatDirector = 0;              // Heartbeat Tracking
 uint8_t heartbeatColor = 0;                 // Heartbeat Tracking
 uint8_t easterEggrollColor = 0;             // Track color for rainbowEasterEggroll()
+uint8_t easterMonth;                        // Stores this year's easter month.
+uint8_t easterDay;                          // Stores this year's easter day.
 CapTouch::Event touchEvent;
 
 void setup() {
@@ -61,17 +65,24 @@ void setup() {
     strip.show();
     rainbowFull(5, 0); // 5ms Delay, 0 is fade in
     rainbowFull(5, 2); // 5ms Delay, 2 is fade out
-    
     Touch.setup();
-    
     Time.zone(-5);
-
+    getEasterDate();
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
 }
 
 void loop() {
-    dayTracking();
+    // True once every hour
+    if (lastHour != Time.hour()) {
+        onceAnHour();
+        lastHour = Time.hour();
+    }
+    // True once every day
+    if (lastDay != Time.day()) {
+        onceADay();
+        lastDay = Time.day();
+    }
     touchEvent = Touch.getEvent();
 
     if (touchEvent == CapTouch::TouchEvent) {
@@ -109,26 +120,26 @@ void loop() {
         // Birthdays
         if (
             (Time.day() == 22 && Time.month() == 2) ||
-            (Time.day() == 24 && Time.month() == 2)
+            (Time.day() == 24 && Time.month() == 2) 
             ) {
             idleDisco();
+        }
+        // Easter, relies on onceADay() and getEasterDate()
+        if ( Time.day() == easterDay && Time.month() == easterMonth ) {
+            idleEaster();
         }
         // Unassigned Heartbeat
         /*if (Time.day() == 25 && Time.month() == 1) {
             idleHeartbeat();
         }*/
-        // Clear any previous day's special idles
-        if (lampBrightness != 0 && Time.hour() == 0 && Time.minute() == 0 && Time.second() <= 3) {
-            for (uint16_t i = 0; i < strip.numPixels(); i++) {
-                strip.setPixelColor(i, 0, 0, 0);
-            }
-            strip.show();
-            lampBrightness = 0;
-        }
     }
-    // Rolls the easter egg by 1 color if true
+    // Easter Egg 1
+    if (lampOn == 1 && (Time.month() * Time.day()) % 256 == activeColor) {
+        rainbowEasterEggroll(0);
+    }
+    // Easter Egg 2
     if (lampOn == 1 && consecutiveChanges != 0 && consecutiveChanges % easterEggRollActivation == 0) {
-        rainbowEasterEggroll();
+        rainbowEasterEggroll(1);
     }
 }
 
@@ -228,16 +239,14 @@ void setColorDither(byte c) { // c is color.  This function does a "random dithe
             reverse <<= 1;
             if(i & bit) reverse |= 1;
         }
-        if (
-            (((Time.month() * Time.day()) % 256) == c) || // Catch either easter egg case
-            (consecutiveChanges != 0 && consecutiveChanges % easterEggRollActivation == 0)
-            ) {
+        if ( ((Time.month() * Time.day()) % 256) == c) {
             easterEggrollColor = 0;
             color = wheelColor((reverse * 256 / strip.numPixels()) & 255, lampBrightness);
-            strip.setPixelColor(reverse, color); 
-        } else {
-            strip.setPixelColor(reverse, color);
+        } else if (consecutiveChanges != 0 && consecutiveChanges % easterEggRollActivation == 0) {
+            easterEggrollColor = 0;
+            color = wheelColor((reverse * 256 / 6) & 255, lampBrightness);
         }
+        strip.setPixelColor(reverse, color);
         strip.show();
         delay(20);
     }
@@ -305,6 +314,40 @@ void rainbowFull(byte wait, byte fade) {
   }
 }
 
+void onceADay() {
+    // Clear any previous day's special idles
+    if (lampBrightness != 0 && Time.hour() == 0 && Time.minute() == 0 && Time.second() <= 3) {
+        for (uint16_t i = 0; i < strip.numPixels(); i++) {
+            strip.setPixelColor(i, 0, 0, 0);
+        }
+        strip.show();
+        lampBrightness = 0;
+    }
+    getEasterDate();
+}
+
+void onceAnHour() {
+    dayTracking();
+}
+
+void getEasterDate() {
+    // Getting the date of easter is a giant pain.
+    easterDay = (19 * (Time.year() % 19) + 24) % 30;        
+    easterDay = 22 + easterDay + ((2 * (Time.year() % 4) + 4 * (Time.year() % 7) + 6 * easterDay + 5) % 7);
+    // jump to next month
+    if( easterDay > 31 ) {
+        easterMonth = 4;
+        easterDay -= 31;
+    } else {
+        easterMonth = 3;
+    }
+    // DEBUG
+    String sEasterDay = String(easterDay);
+    String sEasterMonth = String(easterMonth);
+    Particle.publish("This is Easter", "Month: " + sEasterMonth + ", Day: " + sEasterDay);
+    // END DEBUG
+}
+
 void rainbowEasterEgg() {
     // displays full rainbow, deprecated function now included in setColorDither() function
     for(uint8_t i = 0; i <= strip.numPixels(); i++) {
@@ -313,15 +356,33 @@ void rainbowEasterEgg() {
     strip.show();
 }
 
-void rainbowEasterEggroll() {
-    // Similar to rainbowEasterEgg() but rolls the color
+void rainbowEasterEggroll(byte type) {
+    // displays full rainbow and rolls the color each time called
+    uint16_t magicNumber;
+    if (type == 1) {
+        magicNumber = 6;
+    } else if (type == 2) {
+        magicNumber = 10;
+    } else {
+        magicNumber = strip.numPixels();
+    }
     for(uint8_t i = 0; i <= strip.numPixels(); i++) {
-        strip.setPixelColor(i, wheelColor(((i * 256 / strip.numPixels()) + easterEggrollColor) & 255, lampBrightness));
+        strip.setPixelColor(i, wheelColor(((i * 256 / magicNumber) + easterEggrollColor) & 255, lampBrightness));
     }
     strip.show();
     delay(10);
     easterEggrollColor++;
 }
+
+/*void rainbowEasterEggrollDiag() {
+    // Similar to rainbowEasterEggroll() but diagonal
+    for(uint8_t i = 0; i <= strip.numPixels(); i++) {
+        strip.setPixelColor(i, wheelColor(((i * 256 / 6) + easterEggrollColor) & 255, lampBrightness));
+    }
+    strip.show();
+    delay(10);
+    easterEggrollColor++;
+}*/
 
 void dayTracking() {
     if (Time.hour() < nightHours[0] || Time.hour() >= nightHours[1]) { // Night hours
@@ -546,4 +607,12 @@ void idleHeartbeat() {
     
     heartbeatDirector++;
     heartbeatDirector%=4;
+}
+
+void idleEaster() {
+    lampBrightness = 20;
+    if ( maxBrightness < lampBrightness ) {
+        lampBrightness = maxBrightness;
+    }
+    rainbowEasterEggroll(2);
 }
