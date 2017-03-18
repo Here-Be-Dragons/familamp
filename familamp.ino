@@ -527,7 +527,7 @@ void idleDisco() {
         int randr = random(0,lampBrightness);
         int randg = random(0,lampBrightness); 
         int randb = random(0,lampBrightness);
-        int randi = random(0,(strip.numPixels() - 1));
+        int randi = random(0,strip.numPixels());
         strip.setPixelColor(randi, randr, randg, randb);
         strip.show();
         delay(5);
