@@ -10,20 +10,21 @@ CapTouch Touch(D3, D4);
 #define PIXEL_PIN D2
 #define PIXEL_TYPE WS2812
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN);//, PIXEL_TYPE);
 
 ////
 // User Variables
 ////
 
-uint32_t decayTime = 2835;                  // Start dimming light after elapsed seconds
-uint32_t decayDelay = 3;                    // Seconds between decay fade-out steps
+uint32_t decayTime = 2835;                  // Start extinguishing light after elapsed seconds
+uint32_t decayDelay = 15;                    // Seconds between decay fade-out steps
 uint8_t nightHours[2] = {6,      21};       // Night mode starts at nightHours[1], ends at nightHours[0]
 uint8_t duskHours[2] =  {  7,  19  };       // Dusk mode starts at duskHours[1], ends at duskHours[0].  Needs to be inside nightHours' times.
                                             // Day mode starts at duskHours[0], ends at duskHours[1]
 uint16_t maxDayBrightness = 180;            // 0 - 255, lamp will not exceed this during the day
-uint16_t maxDuskBrightness = 60;            // 0 - 255, lamp will not exceed this during dusk
-uint16_t maxNightBrightness = 5;            // 0 - 255, lamp will not exceed this during the night
+uint16_t maxDuskBrightness = 40;            // 0 - 255, lamp will not exceed this during dusk
+uint16_t maxNightBrightness = 3;            // 0 - 255, lamp will not exceed this during the night
+
 uint32_t easterEggRollActivation = 30;      // Activates rainbowEasterEggroll after this many consecutive color changes
 
 ////
@@ -43,12 +44,14 @@ uint16_t lampBrightness = 0;                // 0 - 255, Tracks current lamp brig
 uint16_t maxBrightness = maxDayBrightness;  // Assigned the current max brightness
 uint8_t dayTrack = 0;                       // Track day/dusk/night condition
 byte activePixels = 0;                      // Tracks number of active pixels, 0 is first pixel
+byte pixelsForPicker = 0;                   // Counter during whileTouching()
 uint8_t lastDay = 0;                        // Used to track if onceADay() has run yet today
-uint8_t lastHour = 0;                        // Used to track if onceAnHour() has run yet this hour
+uint8_t lastHour = 0;                       // Used to track if onceAnHour() has run yet this hour
 
 // Variables for special effects
 uint32_t consecutiveChanges = 0;            // Track how many times the color has been changed before turning off
 uint8_t fadeColor = 0;                      // Track color for special events
+uint8_t fadePixelTracker = 0;               // Track last touched pixel for some idle sequences
 float redStates[PIXEL_COUNT];               // Fireworks Variable
 float blueStates[PIXEL_COUNT];              // Fireworks Variable
 float greenStates[PIXEL_COUNT];             // Fireworks Variable
@@ -67,7 +70,10 @@ void setup() {
     rainbowFull(5, 2); // 5ms Delay, 2 is fade out
     Touch.setup();
     Time.zone(-5);
+    Time.setDSTOffset(1);
+
     getEasterDate();
+    Time.beginDST();
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
 }
@@ -120,7 +126,7 @@ void loop() {
         // Birthdays
         if (
             (Time.day() == 22 && Time.month() == 2) ||
-            (Time.day() == 24 && Time.month() == 2) 
+            (Time.day() == 24 && Time.month() == 2)
             ) {
             idleDisco();
         }
@@ -147,24 +153,25 @@ void whileTouching() {
     byte previousBrightness = lampBrightness; // Store the previous brightness in case we need it later
     uint16_t pixelBrightness = lampBrightness; // Tracks the given pixel's brightness.  Needs to track > 255, so uint16_t
 	uint8_t testColor = activeColor; // Start with the current color
-    activePixels = 0;
+	pixelsForPicker = 0;
+    //activePixels = 0;
     while (touchEvent != CapTouch::ReleaseEvent) {
-        for (byte i = 0; i <= activePixels; i++) {
+        for (byte i = 0; i <= pixelsForPicker; i++) {
             pixelBrightness = lampBrightness + i; //Fade to full brightness
 			if (pixelBrightness > maxBrightness) pixelBrightness = maxBrightness; //catch overflow
-            // "activePixels - i" reverses the direction
-            strip.setPixelColor(activePixels - i, wheelColor(((i * 60 / strip.numPixels()) + testColor) & 255, pixelBrightness)); // "& 255" AKA bitwise and prevents overflow
+            // "pixelsForPicker - i" reverses the direction
+            strip.setPixelColor(pixelsForPicker - i, wheelColor(((i * 60 / strip.numPixels()) + testColor) & 255, pixelBrightness)); // "& 255" AKA bitwise and prevents overflow
 	    }
         strip.show();
         testColor++; //because testColor is uint8_t, automatically loops at 256
-        if(activePixels < (strip.numPixels() - 1)) activePixels++; //Add 1 for next iteration, but prevent looping around
+        if(pixelsForPicker < (strip.numPixels() - 1)) pixelsForPicker++; //Add 1 for next iteration, but prevent looping around
         if(lampBrightness < maxBrightness) lampBrightness++;
         touchEvent = Touch.getEvent();
         delay(3);
     }
-	if (activePixels >= (strip.numPixels() - 10)) {
+	if (pixelsForPicker >= (strip.numPixels() - 10)) {
 	    lampOn = 1;
-		activeColor = testColor;
+	    activeColor = testColor;
 		sendColorUpdate();
 		lastColorUpdate = Time.now();
 	} else {
@@ -187,6 +194,7 @@ void gotColorUpdate(const char *name, const char *data) {
     lampBrightness = maxBrightness;
     lampOn = 1;
     consecutiveChanges++;
+    activePixels = strip.numPixels();
     setColorDither(colorRecieved);
     // DEBUG
     String sColorRecieved = String(colorRecieved);
@@ -210,9 +218,15 @@ void setColorFade(byte c, byte ) { // c is color.  This function does a smooth f
                 startR = (uint8_t)((startRGB >> 16) & 0xff); // Splits out current color into separate R, G, B
                 startG = (uint8_t)((startRGB >> 8) & 0xff);
                 startB = (uint8_t)(startRGB & 0xff);
-                newR = startR + (endR - startR) * fade / 255; // Color mixer
-                newG = startG + (endG - startG) * fade / 255;
-                newB = startB + (endB - startB) * fade / 255;
+                if (j > activePixels) {
+                    newR = startR + (0 - startR) * fade / 255; // Color mixer to black
+                    newG = startG + (0 - startG) * fade / 255;
+                    newB = startB + (0 - startB) * fade / 255;
+                } else {
+                    newR = startR + (endR - startR) * fade / 255; // Color mixer
+                    newG = startG + (endG - startG) * fade / 255;
+                    newB = startB + (endB - startB) * fade / 255;
+                }
                 strip.setPixelColor(j, newR, newG, newB);
             }
             strip.show();
@@ -223,6 +237,10 @@ void setColorFade(byte c, byte ) { // c is color.  This function does a smooth f
 }
 
 void setColorDither(byte c) { // c is color.  This function does a "random dither" to set the new color
+    // April Fool's day: ignore the color you picked and replace it with something random
+    if (Time.day() == 1 && Time.month() == 4) {
+        c = random(0,255);
+    }
     // Determine highest bit needed to represent pixel index
     uint32_t color = wheelColor(c, lampBrightness);
     int hiBit = 0;
@@ -246,14 +264,50 @@ void setColorDither(byte c) { // c is color.  This function does a "random dithe
             easterEggrollColor = 0;
             color = wheelColor((reverse * 256 / 6) & 255, lampBrightness);
         }
-        strip.setPixelColor(reverse, color);
+        if (reverse > activePixels) {
+            strip.setPixelColor(reverse, 0, 0, 0);
+        } else {
+            strip.setPixelColor(reverse, color);
+        }
         strip.show();
         delay(20);
     }
     activeColor = c;
 }
 
-void extinguish() { //Dims the lamp by one unit until lampBrightness is 0 and lampOn is 0
+void extinguishFade() { //Dims the lamp by one unit until lampBrightness is 0 and lampOn is 0
+    lampBrightness--;
+    if (((Time.month() * Time.day()) % 256) == activeColor) { // Semi-random formula to trigger easter egg
+        rainbowEasterEgg();
+    } else {
+        uint32_t color = wheelColor(activeColor, lampBrightness);
+        for (byte j = 0; j <= strip.numPixels(); j++) {
+    		strip.setPixelColor(j, color);
+        }
+        strip.show();
+        if (lampBrightness <= 0) {
+            lampOn = 0; //If the lamp is completely off, set lampOn to 0
+            consecutiveChanges = 0; //Reset counter for RainbowEasterEggroll() activation
+            lampBrightness = 0; // Make sure this number isn't negative somehow
+        }
+    }
+}
+
+void extinguish() { //Turns off one pixel at a time until they're all off
+    activePixels--;
+    for(int i = 0; i <= strip.numPixels() - activePixels; i++) {
+        strip.setPixelColor(strip.numPixels() - i, 0, 0, 0);
+    }
+    strip.show();
+    if (activePixels <= 0) {
+            lampOn = 0; //If the lamp is completely off, set lampOn to 0
+            consecutiveChanges = 0; //Reset counter for RainbowEasterEggroll() activation
+            lampBrightness = 0;
+            activePixels = 0; // Make sure this number isn't negative somehow
+        }
+}
+
+void extinguishOld() { //Dims the lamp by one unit until lampBrightness is 0 and lampOn is 0
     lampBrightness--;
     uint32_t color = wheelColor(activeColor, lampBrightness);
     for (byte j = 0; j <= strip.numPixels(); j++) {
@@ -316,7 +370,7 @@ void rainbowFull(byte wait, byte fade) {
 
 void onceADay() {
     // Clear any previous day's special idles
-    if (lampBrightness != 0 && Time.hour() == 0 && Time.minute() == 0 && Time.second() <= 3) {
+    if (lampBrightness != 0 && lampOn == 0) {
         for (uint16_t i = 0; i < strip.numPixels(); i++) {
             strip.setPixelColor(i, 0, 0, 0);
         }
@@ -350,10 +404,30 @@ void getEasterDate() {
 
 void rainbowEasterEgg() {
     // displays full rainbow, deprecated function now included in setColorDither() function
-    for(uint8_t i = 0; i <= strip.numPixels(); i++) {
+    for(uint8_t i = 0; i <= activePixels; i++) {
         strip.setPixelColor(i, wheelColor((i * 256 / strip.numPixels()) & 255, lampBrightness));
     }
     strip.show();
+}
+
+void rainbowEasterEggroll(byte type) {
+    // displays full rainbow and rolls the color each time called
+    uint16_t magicNumber;
+    if (type == 1) {
+        magicNumber = 6;
+    } else if (type == 2) {
+        magicNumber = 10;
+    } else if (type == 3) {
+        magicNumber = 12;
+    } else {
+        magicNumber = strip.numPixels();
+    }
+    for(uint8_t i = 0; i < activePixels; i++) {
+        strip.setPixelColor(i, wheelColor(((i * 256 / magicNumber) + easterEggrollColor) & 255, lampBrightness));
+    }
+    strip.show();
+    delay(10);
+    easterEggrollColor++;
 }
 
 void rainbowEasterEggroll(byte type) {
@@ -420,7 +494,7 @@ void idleColorFader(uint8_t c1, uint8_t c2) {
     endR = (uint16_t)((color >> 16) & 0xff); // Splits out new color into separate R, G, B
     endG = (uint16_t)((color >> 8) & 0xff);
     endB = (uint16_t)(color & 0xff);
-    for (uint16_t j = 0; j < activePixels; j++) {
+    for (uint16_t j = 0; j < fadePixelTracker; j++) {
         long startRGB = strip.getPixelColor(j); // Get pixel's current color
         currR = (uint16_t)((startRGB >> 16) & 0xff); // Splits out current color into separate R, G, B
         currG = (uint16_t)((startRGB >> 8) & 0xff);
@@ -459,11 +533,11 @@ void idleColorFader(uint8_t c1, uint8_t c2) {
             } else {
                 fadeColor = c1;
             }
-            activePixels = 0;
+            fadePixelTracker = 0;
         }
     }
     strip.show();
-    if ( activePixels < strip.numPixels() ) activePixels++;
+    if ( fadePixelTracker < strip.numPixels() ) fadePixelTracker++;
     delay(20);
 }
 
