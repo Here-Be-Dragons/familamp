@@ -24,6 +24,7 @@ uint8_t duskHours[2] =  {  7,  19  };       // Dusk mode starts at duskHours[1],
 uint16_t maxDayBrightness = 180;            // 0 - 255, lamp will not exceed this during the day
 uint16_t maxDuskBrightness = 40;            // 0 - 255, lamp will not exceed this during dusk
 uint16_t maxNightBrightness = 3;            // 0 - 255, lamp will not exceed this during the night
+
 uint32_t easterEggRollActivation = 30;      // Activates rainbowEasterEggroll after this many consecutive color changes
 
 ////
@@ -67,7 +68,6 @@ void setup() {
     strip.show();
     rainbowFull(5, 0); // 5ms Delay, 0 is fade in
     rainbowFull(5, 2); // 5ms Delay, 2 is fade out
-    
     Touch.setup();
     Time.zone(-5);
     Time.setDSTOffset(1);
@@ -429,6 +429,34 @@ void rainbowEasterEggroll(byte type) {
     delay(10);
     easterEggrollColor++;
 }
+
+void rainbowEasterEggroll(byte type) {
+    // displays full rainbow and rolls the color each time called
+    uint16_t magicNumber;
+    if (type == 1) {
+        magicNumber = 6;
+    } else if (type == 2) {
+        magicNumber = 10;
+    } else {
+        magicNumber = strip.numPixels();
+    }
+    for(uint8_t i = 0; i <= strip.numPixels(); i++) {
+        strip.setPixelColor(i, wheelColor(((i * 256 / magicNumber) + easterEggrollColor) & 255, lampBrightness));
+    }
+    strip.show();
+    delay(10);
+    easterEggrollColor++;
+}
+
+/*void rainbowEasterEggrollDiag() {
+    // Similar to rainbowEasterEggroll() but diagonal
+    for(uint8_t i = 0; i <= strip.numPixels(); i++) {
+        strip.setPixelColor(i, wheelColor(((i * 256 / 6) + easterEggrollColor) & 255, lampBrightness));
+    }
+    strip.show();
+    delay(10);
+    easterEggrollColor++;
+}*/
 
 void dayTracking() {
     if (Time.hour() < nightHours[0] || Time.hour() >= nightHours[1]) { // Night hours
