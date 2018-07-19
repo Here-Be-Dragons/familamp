@@ -73,17 +73,8 @@ void setup() {
     
     Touch.setup();
     
-    // Timezone for each lamp
-    if (System.deviceID() == "2a002b001647353236343033" || System.deviceID() == "1d0029000947353138383138") {
-        Time.zone(-6);
-        Time.setDSTOffset(1);
-    //} else if (System.deviceID() == "290022000947353138383138") {
-    //    Time.zone(-10);
-    //    Time.setDSTOffset(0);
-    } else {
-        Time.zone(-5);
-        Time.setDSTOffset(1);
-    }
+    Time.zone(-5);
+    Time.setDSTOffset(1);
     getEasterDate();
     Time.beginDST();
     //Listen for other lamps to send a particle.publish()
@@ -126,7 +117,7 @@ void loop() {
         if (Time.day() == 25 && Time.month() == 12) {
             idleColorFader(0,85);
         }
-         // St. Patricks Day
+        // St. Patricks Day
         if (Time.day() == 17 && Time.month() == 3) {
             idleColorFlicker(21);
         }
