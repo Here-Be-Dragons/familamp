@@ -24,7 +24,7 @@ uint8_t duskHours[2] =  {  7,  19  };       // Dusk mode starts at duskHours[1],
 uint16_t maxDayBrightness = 180;            // 0 - 255, lamp will not exceed this during the day
 uint16_t maxDuskBrightness = 40;            // 0 - 255, lamp will not exceed this during dusk
 uint16_t maxNightBrightness = 3;            // 0 - 255, lamp will not exceed this during the night
-uint32_t easterEggRollActivation = 30;      // Activates rainbowEasterEggroll after this many consecutive color changes
+uint32_t easterEggRollActivation = 20;      // Activates rainbowEasterEggroll after this many consecutive color changes
 
 ////
 // End User Variables
@@ -46,6 +46,9 @@ byte activePixels = 0;                      // Tracks number of active pixels, 0
 byte pixelsForPicker = 0;                   // Counter during whileTouching()
 uint8_t lastDay = 0;                        // Used to track if onceADay() has run yet today
 uint8_t lastHour = 0;                       // Used to track if onceAnHour() has run yet this hour
+double touchSenseHeartbeat = 0;             // Epoch of last touch heartbeat
+double touchSenseHeartbeatrec = 0;          // Epoch of last touch heartbeat received
+uint8_t sparklePixel = 0;                   // Track last pixel touched for sparkle effect
 
 // Variables for special effects
 uint32_t consecutiveChanges = 0;            // Track how many times the color has been changed before turning off
@@ -69,12 +72,23 @@ void setup() {
     rainbowFull(5, 2); // 5ms Delay, 2 is fade out
     
     Touch.setup();
-    Time.zone(-5);
-    Time.setDSTOffset(1);
+    
+    // Timezone for each lamp
+    if (System.deviceID() == "2a002b001647353236343033" || System.deviceID() == "1d0029000947353138383138") {
+        Time.zone(-6);
+        Time.setDSTOffset(1);
+    //} else if (System.deviceID() == "290022000947353138383138") {
+    //    Time.zone(-10);
+    //    Time.setDSTOffset(0);
+    } else {
+        Time.zone(-5);
+        Time.setDSTOffset(1);
+    }
     getEasterDate();
     Time.beginDST();
     //Listen for other lamps to send a particle.publish()
     Particle.subscribe("FamiLamp_Update", gotColorUpdate, MY_DEVICES);
+    Particle.subscribe("FamiLamp_Sparkle", gotTouchHeartbeat, MY_DEVICES);
 }
 
 void loop() {
@@ -91,34 +105,44 @@ void loop() {
     touchEvent = Touch.getEvent();
 
     if (touchEvent == CapTouch::TouchEvent) {
-		whileTouching();
-	}
+        whileTouching();
+    }
     if (Time.now() - lastColorUpdate > decayTime && lampOn == 1) {
         if (Time.now() - lastDecayDelay >= decayDelay) {
             extinguish();
             lastDecayDelay = Time.now();
         }
     }
-    
+    if (Time.now() - touchSenseHeartbeatRec < 5 && touchSenseHeartbeatRec > lastColorUpdate ) {
+        touchSparkle();
+    } else if ( sparklePixel != strip.numPixels() + 1 ) {
+        removeSparkle();
+        sparklePixel = strip.numPixels() + 1;
+    }
+
     // Special idle functions
     if (lampOn == 0) {
         // Christmas Day
         if (Time.day() == 25 && Time.month() == 12) {
             idleColorFader(0,85);
         }
-        // St. Patricks Day
+         // St. Patricks Day
         if (Time.day() == 17 && Time.month() == 3) {
             idleColorFlicker(21);
+        }
+        // Halloween
+        if (Time.day() == 31 && Time.month() == 10) {
+            idleColorFlicker(64);
         }
         // Valentines Day
         if (Time.day() == 14 && Time.month() == 2) {
             idleColorFlicker(106);
         }
-        // 4th of July
+        // 4th of July, RWB fireworks
         if ( Time.day() == 4 && Time.month() == 7 ) {
-            idleFireworks(0);
+            idleFireworks(2);
         }
-        // New Years Day
+        // New Years Day, white fireworks
         if ( Time.day() == 1 && Time.month() == 1 ) {
             idleFireworks(1);
         }
@@ -131,11 +155,17 @@ void loop() {
         }
         // Easter, relies on onceADay() and getEasterDate()
         if ( Time.day() == easterDay && Time.month() == easterMonth ) {
+            //idleDisco();
             idleEaster();
         }
         // Unassigned Heartbeat
-        /*if (Time.day() == 25 && Time.month() == 1) {
-            idleHeartbeat();
+        //if (Time.day() == 22 && Time.month() == 10) {
+        //    idleHeartbeat();
+        //}
+        // Unassigned mulitcolored fireworks
+        
+        /*if ( Time.day() == 1 && Time.month() == 1 ) {
+            idleFireworks(0);
         }*/
     }
     // Easter Egg 1
@@ -151,16 +181,21 @@ void loop() {
 void whileTouching() {
     byte previousBrightness = lampBrightness; // Store the previous brightness in case we need it later
     uint16_t pixelBrightness = lampBrightness; // Tracks the given pixel's brightness.  Needs to track > 255, so uint16_t
-	uint8_t testColor = activeColor; // Start with the current color
-	pixelsForPicker = 0;
-    //activePixels = 0;
+    uint8_t testColor = activeColor; // Start with the current color
+    pixelsForPicker = 0;
+    double touchLoopTime
     while (touchEvent != CapTouch::ReleaseEvent) {
+        touchLoopTime = Time.now();
+        if (touchLoopTime - touchSenseHeartbeat > 3) {
+            sendSparkle();
+            touchSenseHeartbeat = Time.now();
+        }
         for (byte i = 0; i <= pixelsForPicker; i++) {
             pixelBrightness = lampBrightness + i; //Fade to full brightness
-			if (pixelBrightness > maxBrightness) pixelBrightness = maxBrightness; //catch overflow
+            if (pixelBrightness > maxBrightness) pixelBrightness = maxBrightness; //catch overflow
             // "pixelsForPicker - i" reverses the direction
             strip.setPixelColor(pixelsForPicker - i, wheelColor(((i * 60 / strip.numPixels()) + testColor) & 255, pixelBrightness)); // "& 255" AKA bitwise and prevents overflow
-	    }
+        }
         strip.show();
         testColor++; //because testColor is uint8_t, automatically loops at 256
         if(pixelsForPicker < (strip.numPixels() - 1)) pixelsForPicker++; //Add 1 for next iteration, but prevent looping around
@@ -168,15 +203,15 @@ void whileTouching() {
         touchEvent = Touch.getEvent();
         delay(3);
     }
-	if (pixelsForPicker >= (strip.numPixels() - 10)) {
-	    lampOn = 1;
-	    activeColor = testColor;
-		sendColorUpdate();
-		lastColorUpdate = Time.now();
-	} else {
-	    lampBrightness = previousBrightness;
-	    setColorDither(activeColor);
-	}
+    if (pixelsForPicker >= (strip.numPixels() - 10)) {
+        lampOn = 1;
+        activeColor = testColor;
+        sendColorUpdate();
+        lastColorUpdate = Time.now();
+    } else {
+        lampBrightness = previousBrightness;
+        setColorDither(activeColor);
+    }
 }
 
 void sendColorUpdate() {
@@ -199,7 +234,20 @@ void gotColorUpdate(const char *name, const char *data) {
     String sColorRecieved = String(colorRecieved);
     Particle.publish("Color_Recieved", System.deviceID() + "~" + sColorRecieved);
     // END DEBUG
-	lastColorUpdate = Time.now();
+    lastColorUpdate = Time.now();
+}
+
+void gotTouchHeartbeat(const char *name, const char *data) {
+    String sparkleFromID = String(data);
+    if (sparkleFromID == System.deviceID()) {
+        return
+    } else {
+        touchSenseHeartbeatRec = Time.now();
+    }
+}
+
+void sendSparkle() {
+    Particle.publish("FamiLamp_Sparkle", System.deviceID(), 60, PRIVATE);
 }
 
 void setColorFade(byte c, byte ) { // c is color.  This function does a smooth fade new color.  Deprecated for new setColorDither()
@@ -281,7 +329,7 @@ void extinguishFade() { //Dims the lamp by one unit until lampBrightness is 0 an
     } else {
         uint32_t color = wheelColor(activeColor, lampBrightness);
         for (byte j = 0; j <= strip.numPixels(); j++) {
-    		strip.setPixelColor(j, color);
+            strip.setPixelColor(j, color);
         }
         strip.show();
         if (lampBrightness <= 0) {
@@ -310,7 +358,7 @@ void extinguishOld() { //Dims the lamp by one unit until lampBrightness is 0 and
     lampBrightness--;
     uint32_t color = wheelColor(activeColor, lampBrightness);
     for (byte j = 0; j <= strip.numPixels(); j++) {
-		strip.setPixelColor(j, color);
+        strip.setPixelColor(j, color);
     }
     strip.show();
     if (lampBrightness <= 0) {
@@ -321,28 +369,28 @@ void extinguishOld() { //Dims the lamp by one unit until lampBrightness is 0 and
 }
 
 uint32_t wheelColor(uint16_t WheelPos, uint16_t iBrightness) {
-	float R, G, B;
-	float brightness = iBrightness / 255.0;
+    float R, G, B;
+    float brightness = iBrightness / 255.0;
 
-	if (WheelPos < 85) {
-		R = WheelPos * 3;
-		G = 255 - WheelPos * 3;
-		B = 0;
-	} else if (WheelPos < 170) {
-		WheelPos -= 85;
-		R = 255 - WheelPos * 3;
-		G = 0;
-		B = WheelPos * 3;
-	} else {
-		WheelPos -= 170;
-		R = 0;
-		G = WheelPos * 3;
-		B = 255 - WheelPos * 3;
-	}
-	activeR = R * brightness;// + .5;
-	activeG = G * brightness;// + .5;
-	activeB = B * brightness;// + .5;
-	return strip.Color((byte) activeR,(byte) activeG,(byte) activeB);
+    if (WheelPos < 85) {
+        R = WheelPos * 3;
+        G = 255 - WheelPos * 3;
+        B = 0;
+    } else if (WheelPos < 170) {
+        WheelPos -= 85;
+        R = 255 - WheelPos * 3;
+        G = 0;
+        B = WheelPos * 3;
+    } else {
+        WheelPos -= 170;
+        R = 0;
+        G = WheelPos * 3;
+        B = 255 - WheelPos * 3;
+    }
+    activeR = R * brightness;// + .5;
+    activeG = G * brightness;// + .5;
+    activeB = B * brightness;// + .5;
+    return strip.Color((byte) activeR,(byte) activeG,(byte) activeB);
 }
 
 void rainbowFull(byte wait, byte fade) {
@@ -365,6 +413,28 @@ void rainbowFull(byte wait, byte fade) {
         k--;
     }
   }
+}
+
+void removeSparkle() {
+    // Sparkle the lamp when another lamp is being touched
+    if ( ((Time.month() * Time.day()) % 256) == c) {
+        uint32_t color = wheelColor((sparklePixel * 256 / strip.numPixels()) & 255, lampBrightness);
+    } else if (consecutiveChanges != 0 && consecutiveChanges % easterEggRollActivation == 0) {
+        uint32_t color = wheelColor((sparklePixel * 256 / 6) & 255, lampBrightness);
+    } else {
+        uint32_t color = wheelColor(activeColor, lampBrightness);
+    }
+    strip.setPixelColor(sparklePixel, color);
+    strip.show();
+}
+
+void touchSparkle() {
+    removeSparkle();
+    if (random(10) == 1) {
+        sparklePixel = random(strip.numPixels());
+        strip.setPixelColor(sparklePixel, maxBrightness, maxBrightness, maxBrightness);
+    }
+    strip.show();
 }
 
 void onceADay() {
@@ -397,7 +467,10 @@ void getEasterDate() {
     // DEBUG
     String sEasterDay = String(easterDay);
     String sEasterMonth = String(easterMonth);
+    String sTodayDay = String(Time.day());
+    String sTodayMonth = String(Time.month());
     Particle.publish("This is Easter", "Month: " + sEasterMonth + ", Day: " + sEasterDay);
+    Particle.publish("Today is", "Month: " + sTodayMonth + ", Day: " + sTodayDay);
     // END DEBUG
 }
 
@@ -515,7 +588,7 @@ void idleColorFader(uint8_t c1, uint8_t c2) {
 void idleFireworks(uint8_t w) {
     // Emulates fireworks bursting inside lamp.  Single LEDs flash
     // in the specified color pattern:
-    // `w = 0` for mulitcolor, `w = 1` for all white flashes
+    // `w = 0` for mulitcolor, `w = 1` for all white flashes, 'w = 2` for red, white, and blue
     lampBrightness = 40;
     if ( maxBrightness < lampBrightness ) {
         lampBrightness = maxBrightness;
@@ -527,10 +600,25 @@ void idleFireworks(uint8_t w) {
                 redStates[i] = random(lampBrightness);
                 greenStates[i] = random(lampBrightness);
                 blueStates[i] = random(lampBrightness);
-            } else {
+            } else if (w == 1) {
                 redStates[i] = lampBrightness;
                 greenStates[i] = lampBrightness;
                 blueStates[i] = lampBrightness;
+            } else {
+                uint8_t j = random(3);
+                if (j == 0) {
+                    redStates[i] = lampBrightness;
+                    greenStates[i] = 0;
+                    blueStates[i] = 0;
+                } else if (j == 1) {
+                    redStates[i] = lampBrightness;
+                    greenStates[i] = lampBrightness;
+                    blueStates[i] = lampBrightness;
+                } else {
+                    redStates[i] = 0;
+                    greenStates[i] = 0;
+                    blueStates[i] = lampBrightness;
+                }
             }
         }
     }
@@ -659,5 +747,6 @@ void idleEaster() {
     if ( maxBrightness < lampBrightness ) {
         lampBrightness = maxBrightness;
     }
+    activePixels = strip.numPixels();
     rainbowEasterEggroll(2);
 }
