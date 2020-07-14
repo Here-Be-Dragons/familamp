@@ -1,6 +1,6 @@
 #include "application.h"
 #include "captouch.h"
-#include "neopixel/neopixel.h"
+#include <neopixel.h>
 
 SYSTEM_MODE(AUTOMATIC);
 
@@ -47,7 +47,7 @@ byte pixelsForPicker = 0;                   // Counter during whileTouching()
 uint8_t lastDay = 0;                        // Used to track if onceADay() has run yet today
 uint8_t lastHour = 0;                       // Used to track if onceAnHour() has run yet this hour
 double touchSenseHeartbeat = 0;             // Epoch of last touch heartbeat
-double touchSenseHeartbeatrec = 0;          // Epoch of last touch heartbeat received
+double touchSenseHeartbeatRec = 0;          // Epoch of last touch heartbeat received
 uint8_t sparklePixel = 0;                   // Track last pixel touched for sparkle effect
 
 // Variables for special effects
@@ -174,7 +174,7 @@ void whileTouching() {
     uint16_t pixelBrightness = lampBrightness; // Tracks the given pixel's brightness.  Needs to track > 255, so uint16_t
     uint8_t testColor = activeColor; // Start with the current color
     pixelsForPicker = 0;
-    double touchLoopTime
+    double touchLoopTime;
     while (touchEvent != CapTouch::ReleaseEvent) {
         touchLoopTime = Time.now();
         if (touchLoopTime - touchSenseHeartbeat > 3) {
@@ -192,7 +192,7 @@ void whileTouching() {
         if(pixelsForPicker < (strip.numPixels() - 1)) pixelsForPicker++; //Add 1 for next iteration, but prevent looping around
         if(lampBrightness < maxBrightness) lampBrightness++;
         touchEvent = Touch.getEvent();
-        delay(3);
+        delay(2);
     }
     if (pixelsForPicker >= (strip.numPixels() - 10)) {
         lampOn = 1;
@@ -231,7 +231,7 @@ void gotColorUpdate(const char *name, const char *data) {
 void gotTouchHeartbeat(const char *name, const char *data) {
     String sparkleFromID = String(data);
     if (sparkleFromID == System.deviceID()) {
-        return
+        return;
     } else {
         touchSenseHeartbeatRec = Time.now();
     }
@@ -408,24 +408,34 @@ void rainbowFull(byte wait, byte fade) {
 
 void removeSparkle() {
     // Sparkle the lamp when another lamp is being touched
-    if ( ((Time.month() * Time.day()) % 256) == c) {
-        uint32_t color = wheelColor((sparklePixel * 256 / strip.numPixels()) & 255, lampBrightness);
-    } else if (consecutiveChanges != 0 && consecutiveChanges % easterEggRollActivation == 0) {
-        uint32_t color = wheelColor((sparklePixel * 256 / 6) & 255, lampBrightness);
+    if (lampOn == 1) {
+        uint32_t color;
+        if ( ((Time.month() * Time.day()) % 256) == activeColor) {
+            color = wheelColor((sparklePixel * 256 / strip.numPixels()) & 255, lampBrightness);
+        } else if (consecutiveChanges != 0 && consecutiveChanges % easterEggRollActivation == 0) {
+            color = wheelColor((sparklePixel * 256 / 6) & 255, lampBrightness);
+        } else {
+            color = wheelColor(activeColor, lampBrightness);
+        }
+        strip.setPixelColor(sparklePixel, color);
     } else {
-        uint32_t color = wheelColor(activeColor, lampBrightness);
+        strip.setPixelColor(sparklePixel, 0, 0, 0);
     }
-    strip.setPixelColor(sparklePixel, color);
     strip.show();
 }
 
 void touchSparkle() {
     removeSparkle();
-    if (random(10) == 1) {
-        sparklePixel = random(strip.numPixels());
-        strip.setPixelColor(sparklePixel, maxBrightness, maxBrightness, maxBrightness);
+    uint8_t sparkleBrightness;
+    if (maxBrightness <= 250) {
+        sparkleBrightness = maxBrightness + 5;
+    } else {
+        sparkleBrightness = maxBrightness;
     }
+    sparklePixel = random(strip.numPixels());
+    strip.setPixelColor(sparklePixel, sparkleBrightness, sparkleBrightness, sparkleBrightness);
     strip.show();
+    delay(5);
 }
 
 void onceADay() {
